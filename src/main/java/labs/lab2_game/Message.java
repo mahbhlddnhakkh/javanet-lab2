@@ -41,6 +41,10 @@ public class Message {
           if (expect == GENERIC || expect == READY)
             return handleReady(new Ready(msg));
           break;
+        case UNREADY:
+          if (expect == GENERIC || expect == UNREADY)
+            return handleUnready(new Unready(msg));
+          break;
       }
       return null;
     }
@@ -48,6 +52,7 @@ public class Message {
     public byte[] handleReject(Reject message) { return null; }
     public byte[] handleExit(Exit message) { return null; }
     public byte[] handleReady(Ready message) { return null; }
+    public byte[] handleUnready(Unready message) { return null; }
   }
 
   public static class Generic {
@@ -151,7 +156,7 @@ public class Message {
     public final static byte NAME_EXIST = 0;
     public final static byte GAME_FULL = 1;
     public final static byte GAME_GOING = 2;
-    protected byte reason = 0;
+    protected byte reason;
 
     Reject(byte reason) {
       super();
@@ -184,9 +189,9 @@ public class Message {
     @Override
     public byte[] generateByteMessage() {
       if (!isGood()) {
-        return new byte[1];
+        return new byte[messageMaxSize];
       }
-      byte[] message = new byte[2];
+      byte[] message = new byte[messageMaxSize];
       message[0] = REJECT;
       message[1] = reason;
       return message;
@@ -194,7 +199,7 @@ public class Message {
   }
 
   public static class Exit extends Generic {
-    protected byte slot = 0;
+    protected byte slot;
 
     Exit(byte slot) {
       super();
@@ -228,9 +233,9 @@ public class Message {
     @Override
     public byte[] generateByteMessage() {
       if (!isGood()) {
-        return new byte[1];
+        return new byte[messageMaxSize];
       }
-      byte[] message = new byte[2];
+      byte[] message = new byte[messageMaxSize];
       message[0] = EXIT;
       message[1] = slot;
       return message;
@@ -238,7 +243,7 @@ public class Message {
   }
 
   public static class Ready extends Generic {
-    protected byte slot = 0;
+    protected byte slot;
 
     Ready(byte slot) {
       super();
@@ -272,10 +277,54 @@ public class Message {
     @Override
     public byte[] generateByteMessage() {
       if (!isGood()) {
-        return new byte[1];
+        return new byte[messageMaxSize];
       }
-      byte[] message = new byte[2];
-      message[0] = EXIT;
+      byte[] message = new byte[messageMaxSize];
+      message[0] = READY;
+      message[1] = slot;
+      return message;
+    }
+  }
+
+  public static class Unready extends Generic {
+    protected byte slot;
+
+    Unready(byte slot) {
+      super();
+      this.slot = slot;
+    }
+
+    Unready(byte[] msg) {
+      super(msg);
+    }
+
+    @Override
+    public int getGoodMsgSize() {
+      return 1;
+    }
+
+    @Override
+    public void checkFirstByte(byte[] msg) {
+      if (!isGood() || msg[0] != UNREADY) {
+        setBad();
+      }
+    }
+
+    @Override
+    public void interpretBuffer(byte[] msg, int offset) {
+      if (!isGood()) {
+        return;
+      }
+      slot = msg[offset];
+    }
+
+    @Override
+    public byte[] generateByteMessage() {
+      if (!isGood()) {
+        return new byte[messageMaxSize];
+      }
+      byte[] message = new byte[messageMaxSize];
+      message[0] = UNREADY;
       message[1] = slot;
       return message;
     }

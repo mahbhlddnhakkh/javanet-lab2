@@ -21,7 +21,7 @@ public class App extends Application {
   public void start(Stage stage) throws IOException {
     //scene = new Scene(loadFXML("primary"), Config.win_w, Config.win_h);
     FXMLLoader loader = new FXMLLoader(App.class.getResource("primary" + ".fxml"));
-    scene = new Scene(loader.load());
+    scene = new Scene(loader.load(), Config.win_w, Config.win_h);
     stage.setScene(scene);
     stage.setTitle("Fire in a hole!");
     stage.setResizable(false);

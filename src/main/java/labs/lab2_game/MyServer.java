@@ -25,16 +25,18 @@ public class MyServer {
   public boolean gameIsGoing = false;
 
   private ServerSocket serverSocket;
-  InetAddress ip = null;
+  //InetAddress ip = null;
 
   public ServerMessageHandler messageHandler = new ServerMessageHandler(this);
   public ClientHandler[] clients = new ClientHandler[] {null, null, null, null};
 
   private static class ServerMessageHandler extends MessageHandler {
     private MyServer server;
+
     ServerMessageHandler(MyServer server) {
       this.server = server;
     }
+
     @Override
     public synchronized byte[] handleConnect(Message.Connect message) {
       if (!message.isGood()) {
@@ -67,13 +69,24 @@ public class MyServer {
       }
       return new Message.Connect(freeSlot, message.name.clone()).generateByteMessage();
     }
+
     @Override
     public byte[] handleExit(Message.Exit message) {
       server.deletePlayer(message.slot);
       return null;
     }
+
     @Override
     public byte[] handleReady(Message.Ready message) {
+      server.clients[message.slot].ready = 1;
+      server.sendToAllPlayers(message.generateByteMessage());
+      server.tryStartGame();
+      return null;
+    }
+
+    @Override
+    public byte[] handleUnready(Message.Unready message) {
+      server.clients[message.slot].ready = 0;
       server.sendToAllPlayers(message.generateByteMessage());
       return null;
     }
@@ -119,7 +132,7 @@ public class MyServer {
         dOut = new DataOutputStream(clientSocket.getOutputStream());
         dInp = new DataInputStream(clientSocket.getInputStream());
         byte[] message = new byte[Message.messageMaxSize];
-        dInp.readFully(message, 0, message.length);
+        dInp.read(message, 0, message.length);
         byte[] response = server.messageHandler.handleMessage(message, Message.CONNECT);
         if (response == null || response[0] == Message.REJECT) {
           if (response != null)
@@ -134,16 +147,26 @@ public class MyServer {
         boolean flag = true;
         while (flag) {
           try {
+            int ret = dInp.read(message, 0, message.length);
+            if (ret == -1) {
+              flag = false;
+            }
+            System.out.println("-----");
             System.out.println(slot);
             System.out.println(message[0]);
-            dInp.readFully(message, 0, message.length);
+            System.out.println("-----");
           } catch (IOException e) {
             e.printStackTrace();
             flag = false;
           }
-          server.resolveSlot(message, this);
+          MyServer.resolveSlot(message, slot);
           server.messageHandler.handleMessage(message, Message.GENERIC);
           message[0] = Message.GENERIC;
+          try {
+            Thread.sleep(200);
+          } catch (InterruptedException e) {
+            e.printStackTrace();
+          }
         }
       } catch (IOException e) {
         e.printStackTrace();
@@ -162,7 +185,7 @@ public class MyServer {
     target2Pos = FakeServerApp.controller.target2Pos;
     target2PosStart = FakeServerApp.controller.target2PosStart;
     target2PosEnd = FakeServerApp.controller.target2PosEnd;
-    ip = InetAddress.getLocalHost();
+    //ip = InetAddress.getLocalHost();
     serverSocket = new ServerSocket(Config.port);
     while (true) {
       new ClientHandler(serverSocket.accept(), this).start();
@@ -205,25 +228,27 @@ public class MyServer {
     }
   }
 
-  public void resolveSlot(byte[] message, ClientHandler h) {
+  static public void resolveSlot(byte[] message, byte slot) {
     if (message.length > 1) {
       switch (message[0]) {
         case Message.EXIT:
+        case Message.READY:
         case Message.UNREADY:
         case Message.SHOOT:
         case Message.HIT:
         case Message.WINNER:
-          for (int i = 0; i < clients.length; i++) {
-            if (h == clients[i]) {
-              message[1] = h.slot;
-            }
-          }
+          message[1] = slot;
+          break;
       }
     }
   }
 
   public void sendMessage(byte slot, byte[] message) {
     clients[slot].sendMessage(message);
+  }
+
+  public void tryStartGame() {
+    
   }
 
   public static void main(String[] args) {

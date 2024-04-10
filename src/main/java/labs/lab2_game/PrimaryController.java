@@ -153,6 +153,8 @@ public class PrimaryController {
 
   private Boolean isPaused = false;
 
+  private boolean isReady = false;
+
   private ClientMessageHandler clientMessageHandler = new ClientMessageHandler(this);
   
   DataOutputStream dOut;
@@ -215,6 +217,13 @@ public class PrimaryController {
     public byte[] handleReady(Message.Ready message) {
       Platform.runLater(() -> {
         controller.readyPlayer(message.slot);
+      });
+      return null;
+    }
+    @Override
+    public byte[] handleUnready(Message.Unready message) {
+      Platform.runLater(() -> {
+        controller.unreadyPlayer(message.slot);
       });
       return null;
     }
@@ -385,6 +394,10 @@ public class PrimaryController {
     Fingers[slot].setVisible(true);
   }
 
+  public void unreadyPlayer(byte slot) {
+    Fingers[slot].setVisible(false);
+  }
+
   @FXML
   private void startGame() {
     port = 0;
@@ -474,14 +487,23 @@ public class PrimaryController {
         boolean flag = true;
         while (flag) {
           try {
-            dInp.readFully(message, 0, message.length);
+            int ret = dInp.read(message, 0, message.length);
+            if (ret == -1) {
+              flag = false;
+            }
           } catch (IOException e) {
             e.printStackTrace();
             flag = false;
           }
           System.out.println(message[0]);
+          System.out.println(message[1]);
           clientMessageHandler.handleMessage(message, Message.GENERIC);
           message[0] = Message.GENERIC;
+          try {
+            Thread.sleep(200);
+          } catch (InterruptedException e) {
+            e.printStackTrace();
+          }
         }
       }).start();
     } catch (IOException e) {
@@ -603,7 +625,14 @@ public class PrimaryController {
 
   @FXML
   private void ready() {
-    sendMessage(new Message.Ready((byte)0).generateByteMessage());
+    isReady = !isReady;
+    if (isReady) {
+      sendMessage(new Message.Ready((byte)0).generateByteMessage());
+      ReadyBtn.setText("Не готов");
+    } else {
+      ReadyBtn.setText("Готов");
+      sendMessage(new Message.Unready((byte)0).generateByteMessage());
+    }
   }
 
   @FXML
@@ -654,7 +683,6 @@ public class PrimaryController {
   public synchronized void sendMessage(byte[] msg) {
     try {
       dOut.write(msg);
-      System.out.println("test");
     } catch (IOException e) {
       e.printStackTrace();
     }
