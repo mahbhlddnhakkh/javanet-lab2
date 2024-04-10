@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.image.ImageView?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Pane?>
+<?import javafx.scene.layout.VBox?>
+<?import javafx.scene.shape.Circle?>
+<?import javafx.scene.shape.Line?>
+<?import javafx.scene.shape.Polygon?>
+
+<HBox fx:id="MainFrame" alignment="CENTER" xmlns="http://javafx.com/javafx/21.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="labs.lab2_game.PrimaryController">
+   <children>
+      <VBox fx:id="MainGameFrame" alignment="CENTER">
+         <children>
+            <Pane fx:id="GamePane">
+               <children>
+                  <Polygon fx:id="ArrowPoly1" strokeType="INSIDE" />
+                  <Polygon fx:id="ArrowPoly2" strokeType="INSIDE" />
+                  <Polygon fx:id="ArrowPoly3" strokeType="INSIDE" />
+                  <Polygon fx:id="ArrowPoly4" strokeType="INSIDE" />
+                  <Circle fx:id="TmpHitbox" fill="TRANSPARENT" stroke="BLACK" strokeType="INSIDE" />
+                  <Line fx:id="Target1Line" />
+                  <Line fx:id="Target2Line" />
+                  <Circle fx:id="Player1Circle" strokeType="INSIDE" />
+                  <Circle fx:id="Player2Circle" strokeType="INSIDE" />
+                  <Circle fx:id="Player3Circle" strokeType="INSIDE" />
+                  <Circle fx:id="Player4Circle" strokeType="INSIDE" />
+                  <Circle fx:id="Target1Circle" strokeType="INSIDE" />
+                  <Circle fx:id="Target2Circle" strokeType="INSIDE" />
+                  <ImageView fx:id="Finger1" pickOnBounds="true" preserveRatio="true" />
+                  <ImageView fx:id="Finger2" pickOnBounds="true" preserveRatio="true" />
+                  <ImageView fx:id="Finger3" pickOnBounds="true" preserveRatio="true" />
+                  <ImageView fx:id="Finger4" pickOnBounds="true" preserveRatio="true" />
+               </children></Pane>
+            <HBox fx:id="ButtonsFrame" alignment="CENTER">
+               <children>
+                  <Button fx:id="StartGameBtn" mnemonicParsing="false" onAction="#startGame" text="Начало игры" />
+                  <Button fx:id="ReadyBtn" mnemonicParsing="false" onAction="#ready" text="Готов" />
+                  <Button fx:id="ShootBtn" mnemonicParsing="false" onAction="#shoot" text="Выстрел" />
+                  <Button fx:id="PauseBtn" mnemonicParsing="false" onAction="#pauseGame" text="Пауза" />
+                  <Button fx:id="ExitBtn" mnemonicParsing="false" onAction="#stopGame" text="Выйти" />
+               </children>
+               <VBox.margin>
+                  <Insets />
+               </VBox.margin>
+            </HBox>
+         </children>
+      </VBox>
+      <VBox fx:id="ScoreFrame" prefWidth="89.0">
+         <children>
+            <VBox fx:id="ScoreFramePlayer1" prefHeight="200.0" prefWidth="100.0">
+               <children>
+                  <Circle strokeType="INSIDE" />
+                  <Label text="Игрок:" />
+                  <Label text="SampleText" />
+                  <Label text="Счет:" />
+                  <Label text="0" />
+                  <Label text="Выстрелов:" />
+                  <Label text="0" />
+               </children>
+            </VBox>
+            <VBox fx:id="ScoreFramePlayer2" prefHeight="200.0" prefWidth="100.0">
+               <children>
+                  <Circle strokeType="INSIDE" />
+                  <Label text="Игрок:" />
+                  <Label text="SampleText" />
+                  <Label text="Счет:" />
+                  <Label text="0" />
+                  <Label text="Выстрелов:" />
+                  <Label text="0" />
+               </children>
+            </VBox>
+            <VBox fx:id="ScoreFramePlayer3" prefHeight="200.0" prefWidth="100.0">
+               <children>
+                  <Circle strokeType="INSIDE" />
+                  <Label text="Игрок:" />
+                  <Label text="SampleText" />
+                  <Label text="Счет:" />
+                  <Label text="0" />
+                  <Label text="Выстрелов:" />
+                  <Label text="0" />
+               </children>
+            </VBox>
+            <VBox fx:id="ScoreFramePlayer4" prefHeight="200.0" prefWidth="100.0">
+               <children>
+                  <Circle strokeType="INSIDE" />
+                  <Label text="Игрок:" />
+                  <Label text="SampleText" />
+                  <Label text="Счет:" />
+                  <Label text="0" />
+                  <Label text="Выстрелов:" />
+                  <Label text="0" />
+               </children>
+            </VBox>
+         </children>
+         <HBox.margin>
+            <Insets />
+         </HBox.margin>
+      </VBox>
+   </children>
+</HBox>
