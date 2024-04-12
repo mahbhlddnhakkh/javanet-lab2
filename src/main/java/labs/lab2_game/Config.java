@@ -26,4 +26,6 @@ public class Config {
   public final static InetAddress ip = null;
 
   public final static int name_max_length = 24;
+
+  public final static byte final_score = 6;
 }

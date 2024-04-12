@@ -30,22 +30,6 @@ import javafx.stage.Stage;
 import javafx.stage.Window;
 import labs.lab2_game.Message.MessageHandler;
 
-class NumberField extends TextField {
-  @Override
-  public void replaceText(int start, int end, String text) {
-    if (text.matches("[0-9]*")) {
-      super.replaceText(start, end, text);
-    }
-  }
-
-  @Override
-  public void replaceSelection(String text) {
-    if (text.matches("[0-9]*")) {
-      super.replaceSelection(text);
-    }
-  }
-}
-
 public class PrimaryController {
 
   private int port = 0;
@@ -79,6 +63,17 @@ public class PrimaryController {
   private ImageView[] Fingers;
 
   @FXML
+  private ImageView Hand1;
+  @FXML
+  private ImageView Hand2;
+  @FXML
+  private ImageView Hand3;
+  @FXML
+  private ImageView Hand4;
+
+  private ImageView[] Hands;
+
+  @FXML
   private Circle Player1Circle;
   @FXML
   private Circle Player2Circle;
@@ -92,8 +87,6 @@ public class PrimaryController {
   @FXML
   private Circle Target1Circle;
 
-  private double target1Direction = 1;
-
   @FXML
   private Line Target1Line;
 
@@ -102,8 +95,6 @@ public class PrimaryController {
 
   @FXML
   private Line Target2Line;
-
-  private double target2Direction = 1;
 
   @FXML
   private Polygon ArrowPoly1;
@@ -145,15 +136,11 @@ public class PrimaryController {
   @FXML
   private Button ExitBtn;
 
-  private Thread animationThread = null;
-
-  private Boolean shootingState = false;
-
-  private Boolean gameRunning = false;
-
   private Boolean isPaused = false;
 
   private boolean isReady = false;
+
+  private boolean isGameGoing = false;
 
   private ClientMessageHandler clientMessageHandler = new ClientMessageHandler(this);
   
@@ -168,12 +155,36 @@ public class PrimaryController {
   public double[] target2Pos;
   public double[] target2PosStart;
   public double[] target2PosEnd;
+  public double gamePaneWidth;
+
+  class NumberField extends TextField {
+    @Override
+    public void replaceText(int start, int end, String text) {
+      if (text.matches("[0-9]*")) {
+        super.replaceText(start, end, text);
+      }
+    }
+  
+    @Override
+    public void replaceSelection(String text) {
+      if (text.matches("[0-9]*")) {
+        super.replaceSelection(text);
+      }
+    }
+  }
+
+  public static final void buttonSetTrueVisibility(Button button, boolean value) {
+    button.setManaged(value);
+    button.setVisible(value);
+  }
 
   private static class ClientMessageHandler extends MessageHandler {
     private PrimaryController controller;
+
     ClientMessageHandler(PrimaryController controller) {
       this.controller = controller;
     }
+
     @Override
     public synchronized byte[] handleConnect(Message.Connect message) {
       if (!message.isGood())
@@ -184,6 +195,7 @@ public class PrimaryController {
       });
       return null;
     }
+
     @Override
     public byte[] handleReject(Message.Reject message) {
       Platform.runLater(() -> {
@@ -203,6 +215,7 @@ public class PrimaryController {
       });
       return null;
     }
+
     @Override
     public byte[] handleExit(Message.Exit message) {
       Platform.runLater(() -> {
@@ -213,20 +226,77 @@ public class PrimaryController {
       });
       return null;
     }
+
     @Override
     public byte[] handleReady(Message.Ready message) {
       Platform.runLater(() -> {
-        controller.readyPlayer(message.slot);
+        if (!controller.isGameGoing)
+          controller.readyPlayer(message.slot);
       });
       return null;
     }
+
     @Override
     public byte[] handleUnready(Message.Unready message) {
       Platform.runLater(() -> {
-        controller.unreadyPlayer(message.slot);
+        if (!controller.isGameGoing)
+          controller.unreadyPlayer(message.slot);
       });
       return null;
     }
+
+    @Override
+    public byte[] handleGameBegin(Message.GameBegin message) {
+      Platform.runLater(() -> {
+        controller.isGameGoing = true;
+        controller.initialize_game();
+      });
+      return null;
+    }
+    
+    @Override
+    public byte[] handleSync(Message.Sync message) {
+      Platform.runLater(() -> {
+        controller.sync_game(message.arrows.arr, message.target1PosY, message.target2PosY);
+      });
+      return null;
+    }
+
+    @Override
+    public byte[] handleShoot(Message.Shoot message) {
+      Platform.runLater(() -> {
+        controller.increment_shots_count(message.slot);
+      });
+      return null;
+    }
+
+    @Override
+    public byte[] handleScoreSync(Message.ScoreSync message) {
+      Platform.runLater(() -> {
+        controller.set_score(message.slot, message.score);
+      });
+      return null;
+    }
+
+    @Override
+    public byte[] handlePlayerWon(Message.PlayerWon message) {
+      Platform.runLater(() -> {
+        controller.declare_winner(message.slot);
+      });
+      return null;
+    }
+
+    @Override
+    public byte[] handlePause(Message.Pause message) {
+      // TODO: implement
+      return null;
+    }
+
+    @Override
+    public byte[] handleUnpause(Message.Unpause message) {
+      // TODO: implement
+      return null;
+    } 
   }
 
   private void initialize_dynamic_pos() {
@@ -248,36 +318,42 @@ public class PrimaryController {
       ArrowPolys[i].setTranslateX(0);
       ArrowPolys[i].setVisible(false);
     }
-
-    target1Direction = 1;
-    target2Direction = 1;
   }
 
   private void initialize_start() {
-    for (int i = 0; i < PlayerCircles.length; i++) {
-      PlayerCircles[i].setVisible(false);
-      Fingers[i].setVisible(false);
-      ScoreFramesPlayer[i].setVisible(false);
-      ArrowPolys[i].setTranslateX(0);
-      ArrowPolys[i].setVisible(false);
-    }
+    resetScore();
     Target1Circle.setVisible(false);
     Target2Circle.setVisible(false);
-    StartGameBtn.setManaged(true);
-    ReadyBtn.setManaged(false);
-    ShootBtn.setManaged(false);
-    PauseBtn.setManaged(false);
-    ExitBtn.setManaged(false);
+    buttonSetTrueVisibility(StartGameBtn, true);
+    buttonSetTrueVisibility(ReadyBtn, false);
+    buttonSetTrueVisibility(ShootBtn, false);
+    buttonSetTrueVisibility(PauseBtn, false);
+    buttonSetTrueVisibility(ExitBtn, false);
   }
 
   private void initialize_prepare() {
     Target1Circle.setVisible(false);
     Target2Circle.setVisible(false);
-    StartGameBtn.setManaged(false);
-    ReadyBtn.setManaged(true);
-    ShootBtn.setManaged(false);
-    PauseBtn.setManaged(false);
-    ExitBtn.setManaged(true);
+    buttonSetTrueVisibility(StartGameBtn, false);
+    buttonSetTrueVisibility(ReadyBtn, true);
+    buttonSetTrueVisibility(ShootBtn, false);
+    buttonSetTrueVisibility(PauseBtn, false);
+    buttonSetTrueVisibility(ExitBtn, true);
+  }
+
+  public void initialize_game() {
+    resetScore();
+    ReadyBtn.setText("Готов");
+    isReady = false;
+    PauseBtn.setText("Пауза");
+    isPaused = false;
+    Target1Circle.setVisible(true);
+    Target2Circle.setVisible(true);
+    buttonSetTrueVisibility(StartGameBtn, false);
+    buttonSetTrueVisibility(ReadyBtn, false);
+    buttonSetTrueVisibility(ShootBtn, true);
+    buttonSetTrueVisibility(PauseBtn, true);
+    buttonSetTrueVisibility(ExitBtn, true);
   }
 
   @FXML
@@ -286,6 +362,7 @@ public class PrimaryController {
     PlayerCircles = new Circle[] { Player1Circle, Player2Circle, Player3Circle, Player4Circle };
     ArrowPolys = new Polygon[] { ArrowPoly1, ArrowPoly2, ArrowPoly3, ArrowPoly4 };
     Fingers = new ImageView[] { Finger1, Finger2, Finger3, Finger4 };
+    Hands = new ImageView[] { Hand1, Hand2, Hand3, Hand4 };
     String[] GoofyImgsFilenames = new String[] { "Easy.png", "Normal.png", "Hard.png", "Harder.png" };
 
     MainFrame.setPrefWidth(Config.win_w);
@@ -304,8 +381,7 @@ public class PrimaryController {
     for (int i = 0; i < PlayerCircles.length; i++) {
       PlayerCircles[i].setRadius(Config.player_radius);
       PlayerCircles[i].setTranslateX(Config.player_radius * 1.5);
-      PlayerCircles[i]
-          .setTranslateY(GamePane.getPrefHeight() * (i + 1) / (PlayerCircles.length * 1.25) - Config.player_radius / 2);
+      PlayerCircles[i].setTranslateY(GamePane.getPrefHeight() * (i + 1) / (PlayerCircles.length * 1.25) - Config.player_radius / 2);
       PlayerCircles[i].setFill(new ImagePattern(getImage(GoofyImgsFilenames[i])));
     }
     for (int i = 0; i < Fingers.length; i++) {
@@ -313,6 +389,12 @@ public class PrimaryController {
       Fingers[i].setFitWidth(57);
       Fingers[i].setTranslateY(PlayerCircles[i].getTranslateY() - 8);
       Fingers[i].setTranslateX(Config.player_radius * 3);
+    }
+    for (int i = 0; i < Hands.length; i++) {
+      Hands[i].setImage(getImage("Stophand.png"));
+      Hands[i].setFitHeight(Config.player_radius*2);
+      Hands[i].setTranslateY(PlayerCircles[i].getTranslateY() - Config.player_radius);
+      Hands[i].setTranslateX(Config.player_radius * 2.5);
     }
     for (int i = 0; i < ScoreFramesPlayer.length; i++) {
       Circle goofyAhhFace = (Circle) ScoreFramesPlayer[i].getChildren().get(0);
@@ -327,13 +409,20 @@ public class PrimaryController {
     Target2Circle.setFill(new ImagePattern(getImage("ExtremeDemon.png")));
 
     initialize_dynamic_pos();
+    for (int i = 0; i < PlayerCircles.length; i++) {
+      PlayerCircles[i].setVisible(false);
+      Fingers[i].setVisible(false);
+      Hands[i].setVisible(false);
+      ScoreFramesPlayer[i].setVisible(false);
+      ArrowPolys[i].setTranslateX(0);
+      ArrowPolys[i].setVisible(false);
+    }
     initialize_start();
 
     for (int i = 0; i < ArrowPolys.length; i++) {
       Double[] arrow_line_start_end = new Double[] {
           PlayerCircles[i].getTranslateX() + PlayerCircles[i].getRadius() + 70, PlayerCircles[i].getTranslateY(),
-          PlayerCircles[i].getTranslateX() + PlayerCircles[i].getRadius() + 70 + Config.arrow_length,
-          PlayerCircles[i].getTranslateY()
+          PlayerCircles[i].getTranslateX() + PlayerCircles[i].getRadius() + 70 + Config.arrow_length, PlayerCircles[i].getTranslateY()
       };
       ArrowPolys[i].getPoints().clear();
       ArrowPolys[i].getPoints().addAll(new Double[] {
@@ -362,6 +451,17 @@ public class PrimaryController {
     target2Pos = new double[] { Target2Circle.getTranslateX(), Target2Circle.getTranslateY() };
     target2PosStart = new double[] { Target2Line.getStartX(), Target2Line.getStartY() };
     target2PosEnd = new double[] { Target2Line.getEndX(), Target2Line.getEndY() };
+
+    gamePaneWidth = GamePane.getPrefWidth();
+  }
+
+  private void resetScore() {
+    for (int i = 0; i < ScoreFramesPlayer.length; i++) {
+      Label playerScoreLabel = (Label)ScoreFramesPlayer[i].getChildren().get(4);
+      Label playerShotsLabel = (Label)ScoreFramesPlayer[i].getChildren().get(6);
+      playerScoreLabel.setText("0");
+      playerShotsLabel.setText("0");
+    }
   }
 
   private static Image getImage(String path) throws IOException {
@@ -396,6 +496,35 @@ public class PrimaryController {
 
   public void unreadyPlayer(byte slot) {
     Fingers[slot].setVisible(false);
+  }
+
+  public void sync_game(MyUtils.ArrowState[] arrows, double target1Pos, double target2Pos) {
+    for (int i = 0; i < arrows.length; i++) {
+      ArrowPolys[i].setVisible(arrows[i].visible);
+      ArrowPolys[i].setTranslateX(arrows[i].posX - arrowsPos[i][0]); // because arrows[i].posX is a hitbox position, not arrow's
+    }
+    Target1Circle.setTranslateY(target1Pos);
+    Target2Circle.setTranslateY(target2Pos);
+  }
+
+  public void set_score(byte slot, byte score) {
+    Label playerScoreLabel = (Label)ScoreFramesPlayer[slot].getChildren().get(4);
+    playerScoreLabel.setText("" + score);
+  }
+
+  public void increment_shots_count(byte slot) {
+    Label playerShotsLabel = (Label)ScoreFramesPlayer[slot].getChildren().get(6);
+    playerShotsLabel.setText("" + (Integer.parseInt(playerShotsLabel.getText()) + 1));
+  }
+
+  public void declare_winner(byte slot) {
+    initialize_prepare();
+    Label playerNameLabel = (Label)ScoreFramesPlayer[slot].getChildren().get(2);
+    for (int i = 0; i < PlayerCircles.length; i++) {
+      unreadyPlayer((byte)i);
+    }
+    isGameGoing = false;
+    createErrorPopup(null, "Игрок " + playerNameLabel.getText() + " победил!");
   }
 
   @FXML
@@ -496,14 +625,8 @@ public class PrimaryController {
             flag = false;
           }
           System.out.println(message[0]);
-          System.out.println(message[1]);
           clientMessageHandler.handleMessage(message, Message.GENERIC);
           message[0] = Message.GENERIC;
-          try {
-            Thread.sleep(200);
-          } catch (InterruptedException e) {
-            e.printStackTrace();
-          }
         }
       }).start();
     } catch (IOException e) {
@@ -515,90 +638,6 @@ public class PrimaryController {
       }
       e.printStackTrace();
     }
-    /*
-     * if (animationThread != null || gameRunning) {
-     * initialize_dynamic_pos();
-     * resetScore();
-     * return;
-     * }
-     * gameRunning = true;
-     * shootingState = false;
-     * animationThread = new Thread( () -> {
-     * while(gameRunning) {
-     * if (isPaused) {
-     * try {
-     * synchronized(this) {
-     * this.wait();
-     * }
-     * } catch (InterruptedException ex) {
-     * throw new RuntimeException(ex);
-     * }
-     * }
-     * Platform.runLater( () -> {
-     * if (shootingState) {
-     * double arrowHitboxCenterX = ArrowPoly.getTranslateX() +
-     * ArrowPoly.getPoints().get(2) + Config.arrow_hitbox_radius / 2;
-     * double dx = arrowHitboxCenterX - Target1Circle.getTranslateX();
-     * double dy = PlayerCircle.getTranslateY() - Target1Circle.getTranslateY();
-     * if (Math.sqrt(dx*dx + dy*dy) <= Config.arrow_hitbox_radius +
-     * Target1Circle.getRadius()) {
-     * registerHit(1);
-     * }
-     * dx = arrowHitboxCenterX - Target2Circle.getTranslateX();
-     * dy = PlayerCircle.getTranslateY() - Target2Circle.getTranslateY();
-     * if (shootingState && (Math.sqrt(dx*dx + dy*dy) <= Config.arrow_hitbox_radius
-     * + Target2Circle.getRadius())) {
-     * registerHit(2);
-     * }
-     * if (shootingState && (arrowHitboxCenterX + Config.arrow_hitbox_radius >
-     * GamePane.getPrefWidth())) {
-     * registerHit(0);
-     * }
-     * if (shootingState) {
-     * ArrowPoly.setTranslateX(ArrowPoly.getTranslateX() + Config.arrow_speed);
-     * }
-     * }
-     * Target1Circle.setTranslateY(Target1Circle.getTranslateY() +
-     * Config.target_speed * target1Direction);
-     * if (Target1Circle.getTranslateY() > Target1Line.getEndY() -
-     * Target1Circle.getRadius()) {
-     * target1Direction = -1;
-     * Target1Circle.setTranslateY(Target1Line.getEndY() -
-     * Target1Circle.getRadius());
-     * }
-     * if (Target1Circle.getTranslateY() < Target1Line.getStartY() +
-     * Target1Circle.getRadius()) {
-     * target1Direction = 1;
-     * Target1Circle.setTranslateY(Target1Line.getStartY() +
-     * Target1Circle.getRadius());
-     * }
-     * 
-     * Target2Circle.setTranslateY(Target2Circle.getTranslateY() +
-     * Config.target_speed * 2 * target2Direction);
-     * if (Target2Circle.getTranslateY() > Target2Line.getEndY() -
-     * Target2Circle.getRadius()) {
-     * target2Direction = -1;
-     * Target2Circle.setTranslateY(Target2Line.getEndY() -
-     * Target2Circle.getRadius());
-     * }
-     * if (Target2Circle.getTranslateY() < Target2Line.getStartY() +
-     * Target2Circle.getRadius()) {
-     * target2Direction = 1;
-     * Target2Circle.setTranslateY(Target2Line.getStartY() +
-     * Target2Circle.getRadius());
-     * }
-     * } );
-     * try {
-     * Thread.sleep(Config.sleep_time);
-     * } catch (InterruptedException ex) {
-     * throw new RuntimeException(ex);
-     * }
-     * }
-     * initialize_dynamic_pos();
-     * resetScore();
-     * });
-     * animationThread.start();
-     */
   }
 
   public void createErrorPopup(Window window, String text) {
@@ -625,59 +664,29 @@ public class PrimaryController {
 
   @FXML
   private void ready() {
-    isReady = !isReady;
     if (isReady) {
-      sendMessage(new Message.Ready((byte)0).generateByteMessage());
-      ReadyBtn.setText("Не готов");
-    } else {
-      ReadyBtn.setText("Готов");
       sendMessage(new Message.Unready((byte)0).generateByteMessage());
+      ReadyBtn.setText("Готов");
+    } else {
+      ReadyBtn.setText("Не готов");
+      sendMessage(new Message.Ready((byte)0).generateByteMessage());
     }
+    isReady = !isReady;
   }
 
   @FXML
   private void shoot() {
-    if (animationThread == null || shootingState)
-      return;
-    shootingState = true;
-    // ArrowPoly.setVisible(true);
-    // PlayerShots.setText("" + (Integer.parseInt(PlayerShots.getText()) + 1));
-  }
-
-  private void registerHit(int score) {
-    // if (score != 0) PlayerScore.setText("" +
-    // (Integer.parseInt(PlayerScore.getText()) + score));
-    shootingState = false;
-    // ArrowPoly.setVisible(false);
-    // ArrowPoly.setTranslateX(0);
-  }
-
-  private void resetScore() {
-    // PlayerScore.setText("0");
-    // PlayerShots.setText("0");
+    sendMessage(new Message.Shoot((byte)0).generateByteMessage());
   }
 
   @FXML
   private void stopGame() {
-    gameRunning = false;
-    animationThread = null;
+    // TODO: implement
   }
 
   @FXML
   private void pauseGame() {
-    if (animationThread == null || !gameRunning)
-      return;
-    isPaused = !isPaused;
-    if (isPaused) {
-      // we pressed "Pause"
-      PauseBtn.setText("Продолжить");
-    } else {
-      // we pressed "Unpause"
-      PauseBtn.setText("Пауза");
-      synchronized (this) {
-        notifyAll();
-      }
-    }
+    // TODO: implement
   }
 
   public synchronized void sendMessage(byte[] msg) {
@@ -697,5 +706,4 @@ public class PrimaryController {
       }
     }
   }
-
 }

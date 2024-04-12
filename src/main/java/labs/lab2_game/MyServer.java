@@ -3,7 +3,6 @@ package labs.lab2_game;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
-import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
@@ -18,17 +17,23 @@ public class MyServer {
   private double[] target2Pos;
   private double[] target2PosStart;
   private double[] target2PosEnd;
+  private double gamePaneWidth;
+
+  private Message.Sync sync;
 
   private double target1Direction = 1;
   private double target2Direction = 1;
 
   public boolean gameIsGoing = false;
 
+  public boolean gameIsPaused = false;
+
   private ServerSocket serverSocket;
   //InetAddress ip = null;
 
   public ServerMessageHandler messageHandler = new ServerMessageHandler(this);
   public ClientHandler[] clients = new ClientHandler[] {null, null, null, null};
+  public Thread gameThread;
 
   private static class ServerMessageHandler extends MessageHandler {
     private MyServer server;
@@ -52,7 +57,7 @@ public class MyServer {
       for (int i = 0; i < server.clients.length; i++) {
         if (server.clients[i] != null) {
           slotsLeft--;
-          if (server.clients[i].getPlayerName().equals(name)) {
+          if (server.clients[i].name.equals(name)) {
             return new Message.Reject(Message.Reject.NAME_EXIST).generateByteMessage();
           }
         } else {
@@ -76,18 +81,44 @@ public class MyServer {
       return null;
     }
 
+    private synchronized void setReadyUnready(byte slot, byte ready, byte[] msg) {
+      if (!server.gameIsGoing) {
+        server.clients[slot].ready = ready;
+        server.sendToAllPlayers(msg);
+      }
+    }
+
     @Override
     public byte[] handleReady(Message.Ready message) {
-      server.clients[message.slot].ready = 1;
-      server.sendToAllPlayers(message.generateByteMessage());
+      setReadyUnready(message.slot, (byte)1, message.generateByteMessage());
       server.tryStartGame();
       return null;
     }
 
     @Override
     public byte[] handleUnready(Message.Unready message) {
-      server.clients[message.slot].ready = 0;
-      server.sendToAllPlayers(message.generateByteMessage());
+      setReadyUnready(message.slot, (byte)0, message.generateByteMessage());
+      return null;
+    }
+
+    @Override
+    public byte[] handleShoot(Message.Shoot message) {
+      if (server.gameIsGoing) {
+        server.clients[message.slot].shootingState = true;
+        server.sendToAllPlayers(message.generateByteMessage());
+      }
+      return null;
+    }
+
+    @Override
+    public byte[] handlePause(Message.Pause message) {
+      // TODO: implement
+      return null;
+    }
+
+    @Override
+    public byte[] handleUnpause(Message.Unpause message) {
+      // TODO: implement
       return null;
     }
   }
@@ -96,27 +127,17 @@ public class MyServer {
     public Socket clientSocket;
     private MyServer server;
     private String name;
-    private int score = 0;
+    private byte score = 0;
     private byte slot = 0;
     private byte ready = 0;
+    private byte pause = 0;
+    public boolean shootingState = false;
     public DataOutputStream dOut;
     public DataInputStream dInp;
 
     ClientHandler(Socket socket, MyServer s) {
       clientSocket = socket;
       server = s;
-    }
-
-    public String getPlayerName() {
-      return name;
-    }
-
-    public int getPlayerScore() {
-      return score;
-    }
-
-    public byte getSlot() {
-      return slot;
     }
 
     public synchronized void sendMessage(byte[] message) {
@@ -162,11 +183,6 @@ public class MyServer {
           MyServer.resolveSlot(message, slot);
           server.messageHandler.handleMessage(message, Message.GENERIC);
           message[0] = Message.GENERIC;
-          try {
-            Thread.sleep(200);
-          } catch (InterruptedException e) {
-            e.printStackTrace();
-          }
         }
       } catch (IOException e) {
         e.printStackTrace();
@@ -185,10 +201,18 @@ public class MyServer {
     target2Pos = FakeServerApp.controller.target2Pos;
     target2PosStart = FakeServerApp.controller.target2PosStart;
     target2PosEnd = FakeServerApp.controller.target2PosEnd;
-    //ip = InetAddress.getLocalHost();
+    gamePaneWidth = FakeServerApp.controller.gamePaneWidth;
+    resetSync();
     serverSocket = new ServerSocket(Config.port);
     while (true) {
       new ClientHandler(serverSocket.accept(), this).start();
+    }
+  }
+
+  public void resetSync() {
+    sync = new Message.Sync(new MyUtils.ArrowStateArray(clients.length), target1Pos[1], target2Pos[1]);
+    for (int i = 0; i < clients.length; i++) {
+      sync.arrows.arr[i].posX = arrowsPos[i][0];
     }
   }
 
@@ -199,7 +223,8 @@ public class MyServer {
       for (int i = 0; i < clients.length; i++) {
         if (clients[i] != null) {
           if (i != slot) {
-            clients[i].sendMessage(new Message.Connect(handler.slot, handler.name.getBytes()).generateByteMessage());
+            //clients[i].sendMessage(new Message.Connect(handler.slot, handler.name.getBytes()).generateByteMessage());
+            sendMessage((byte)i, new Message.Connect(handler.slot, handler.name.getBytes()).generateByteMessage());
           }
           dOut.write(new Message.Connect(clients[i].slot, clients[i].name.getBytes()).generateByteMessage());
         }
@@ -208,6 +233,7 @@ public class MyServer {
       e.printStackTrace();
     }
   }
+
   public synchronized void deletePlayer(byte slot) {
     if (clients[slot] != null) {
       try {
@@ -221,6 +247,12 @@ public class MyServer {
   }
 
   public void sendToAllPlayers(byte[] message) {
+    if (message[0] != Message.SYNC) {
+      System.out.println("|||||");
+      System.out.println("ALL");
+      System.out.println(message[0]);
+      System.out.println("|||||");
+    }
     for (int i = 0; i < clients.length; i++) {
       if (clients[i] != null) {
         clients[i].sendMessage(message);
@@ -228,27 +260,150 @@ public class MyServer {
     }
   }
 
-  static public void resolveSlot(byte[] message, byte slot) {
+  public boolean arePlayersLeft() {
+    for (int i = 0; i < clients.length; i++) {
+      if (clients[i] != null) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  static public final void resolveSlot(byte[] message, byte slot) {
     if (message.length > 1) {
       switch (message[0]) {
         case Message.EXIT:
         case Message.READY:
         case Message.UNREADY:
         case Message.SHOOT:
-        case Message.HIT:
-        case Message.WINNER:
+        case Message.SCORE_SYNC:
+        case Message.PLAYER_WON:
           message[1] = slot;
           break;
       }
     }
   }
 
+  public synchronized void playerWon(byte slot) {
+    if (gameIsGoing) {
+      resetSync();
+      sendToAllPlayers(sync.generateByteMessage());
+      gameIsGoing = false;
+      sendToAllPlayers(new Message.PlayerWon(slot).generateByteMessage());
+      for (int i = 0; i < clients.length; i++) {
+        if (clients[i] != null) {
+          clients[i].ready = 0;
+          clients[i].pause = 0;
+          clients[i].score = 0;
+        }
+      }
+    }
+  }
+
   public void sendMessage(byte slot, byte[] message) {
+    System.out.println("|||||");
+    System.out.println(slot);
+    System.out.println(message[0]);
+    System.out.println("|||||");
     clients[slot].sendMessage(message);
   }
 
-  public void tryStartGame() {
-    
+  public synchronized void tryStartGame() {
+    if (gameIsGoing) {
+      return;
+    }
+    boolean flag = true;
+    for (int i = 0; i < clients.length; i++) {
+      if (clients[i] != null && clients[i].ready == (byte)0) {
+        flag = false;
+        break;
+      }
+    }
+    if (!flag) {
+      return;
+    }
+    gameIsGoing = true;
+    gameThread = new Thread(() -> {
+      while(gameIsGoing) {
+        if (gameIsPaused) {
+          try {
+            synchronized(this) {
+              this.wait();
+            }
+          } catch (InterruptedException e) {
+            e.printStackTrace();
+          }
+        }
+        for (int i = 0; i < clients.length; i++) {
+          if (clients[i] != null && clients[i].shootingState) {
+            sync.arrows.arr[i].visible = true;
+            double dx = sync.arrows.arr[i].posX - target1Pos[0];
+            double dy = arrowsPos[i][1] - sync.target1PosY;
+            byte points = -1;
+            if (Math.sqrt(dx*dx + dy*dy) <= Config.arrow_hitbox_radius + Config.target_radius) {
+              points = 1;
+            }
+            dx = sync.arrows.arr[i].posX - target2Pos[0];
+            dy = arrowsPos[i][1] - sync.target2PosY;
+            if (points == -1 && (Math.sqrt(dx*dx + dy*dy) <= Config.arrow_hitbox_radius + Config.target_radius / 2)) {
+              points = 2;
+            }
+            if (points == -1 && (sync.arrows.arr[i].posX + Config.arrow_hitbox_radius > gamePaneWidth)) {
+              points = 0;
+            }
+            switch (points) {
+              case -1:
+                sync.arrows.arr[i].posX += Config.arrow_speed;
+                break;
+              case 0:
+                sync.arrows.arr[i].posX = arrowsPos[i][0];
+                sync.arrows.arr[i].visible = false;
+                clients[i].shootingState = false;
+                break;
+              default:
+                sync.arrows.arr[i].posX = arrowsPos[i][0];
+                sync.arrows.arr[i].visible = false;
+                clients[i].score += points;
+                clients[i].shootingState = false;
+                sendToAllPlayers(new Message.ScoreSync((byte)i, clients[i].score).generateByteMessage());
+                if (clients[i].score >= Config.final_score) {
+                  playerWon((byte)i);
+                  return;
+                }
+                break;
+            }
+          }
+        }
+        sync.target1PosY += Config.target_speed * target1Direction;
+        if (sync.target1PosY > target1PosEnd[1] - Config.target_radius) {
+          target1Direction = -1;
+          sync.target1PosY = target1PosEnd[1] - Config.target_radius;
+        }
+        if (sync.target1PosY < target1PosStart[1] + Config.target_radius) {
+          target1Direction = 1;
+          sync.target1PosY = target1PosStart[1] + Config.target_radius;
+        }
+
+        sync.target2PosY += Config.target_speed * target2Direction * 2;
+        if (sync.target2PosY > target2PosEnd[1] - Config.target_radius / 2) {
+          target2Direction = -1;
+          sync.target2PosY = target2PosEnd[1] - Config.target_radius / 2;
+        }
+        if (sync.target2PosY < target2PosStart[1] + Config.target_radius / 2) {
+          target2Direction = 1;
+          sync.target2PosY = target2PosStart[1] + Config.target_radius / 2;
+        }
+        sendToAllPlayers(sync.generateByteMessage());
+        try {
+          Thread.sleep(Config.sleep_time);
+        } catch (InterruptedException e) {
+          e.printStackTrace();
+        }
+        gameIsGoing = arePlayersLeft();
+      }
+    });
+    sendToAllPlayers(new Message.GameBegin().generateByteMessage());
+    gameThread.start();
   }
 
   public static void main(String[] args) {

@@ -30,6 +30,10 @@
                   <Circle fx:id="Player4Circle" strokeType="INSIDE" />
                   <Circle fx:id="Target1Circle" strokeType="INSIDE" />
                   <Circle fx:id="Target2Circle" strokeType="INSIDE" />
+                  <ImageView fx:id="Hand1" pickOnBounds="true" preserveRatio="true" />
+                  <ImageView fx:id="Hand2" pickOnBounds="true" preserveRatio="true" />
+                  <ImageView fx:id="Hand3" pickOnBounds="true" preserveRatio="true" />
+                  <ImageView fx:id="Hand4" pickOnBounds="true" preserveRatio="true" />
                   <ImageView fx:id="Finger1" pickOnBounds="true" preserveRatio="true" />
                   <ImageView fx:id="Finger2" pickOnBounds="true" preserveRatio="true" />
                   <ImageView fx:id="Finger3" pickOnBounds="true" preserveRatio="true" />
