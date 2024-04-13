@@ -3,6 +3,7 @@ package labs.lab2_game;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.net.ConnectException;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 
@@ -133,10 +134,7 @@ public class PrimaryController {
   @FXML
   private Button PauseBtn;
 
-  @FXML
-  private Button ExitBtn;
-
-  private Boolean isPaused = false;
+  private boolean isPaused = false;
 
   private boolean isReady = false;
 
@@ -203,13 +201,13 @@ public class PrimaryController {
           return;
         switch (message.reason) {
           case Message.Reject.NAME_EXIST:
-            controller.createErrorPopup(null, "Имя уже существует на сервере");
+            controller.createInfoPopup(null, "Имя уже существует на сервере");
             break;
           case Message.Reject.GAME_FULL:
-            controller.createErrorPopup(null, "Сервер заполнен");
+            controller.createInfoPopup(null, "Сервер заполнен");
             break;
           case Message.Reject.GAME_GOING:
-          controller.createErrorPopup(null, "Игра уже идёт");
+          controller.createInfoPopup(null, "Игра уже идёт");
             break;
         }
       });
@@ -288,13 +286,17 @@ public class PrimaryController {
 
     @Override
     public byte[] handlePause(Message.Pause message) {
-      // TODO: implement
+      Platform.runLater(() -> {
+        controller.player_paused(message.slot);
+      });
       return null;
     }
 
     @Override
     public byte[] handleUnpause(Message.Unpause message) {
-      // TODO: implement
+      Platform.runLater(() -> {
+        controller.player_unpaused(message.slot);
+      });
       return null;
     } 
   }
@@ -322,13 +324,23 @@ public class PrimaryController {
 
   private void initialize_start() {
     resetScore();
+    for (int i = 0; i < PlayerCircles.length; i++) {
+      PlayerCircles[i].setVisible(false);
+      Fingers[i].setVisible(false);
+      Hands[i].setVisible(false);
+      ScoreFramesPlayer[i].setVisible(false);
+      ArrowPolys[i].setTranslateX(0);
+      ArrowPolys[i].setVisible(false);
+    }
+    isGameGoing = false;
+    isPaused = false;
+    isReady = false;
     Target1Circle.setVisible(false);
     Target2Circle.setVisible(false);
     buttonSetTrueVisibility(StartGameBtn, true);
     buttonSetTrueVisibility(ReadyBtn, false);
     buttonSetTrueVisibility(ShootBtn, false);
     buttonSetTrueVisibility(PauseBtn, false);
-    buttonSetTrueVisibility(ExitBtn, false);
   }
 
   private void initialize_prepare() {
@@ -338,7 +350,6 @@ public class PrimaryController {
     buttonSetTrueVisibility(ReadyBtn, true);
     buttonSetTrueVisibility(ShootBtn, false);
     buttonSetTrueVisibility(PauseBtn, false);
-    buttonSetTrueVisibility(ExitBtn, true);
   }
 
   public void initialize_game() {
@@ -353,7 +364,6 @@ public class PrimaryController {
     buttonSetTrueVisibility(ReadyBtn, false);
     buttonSetTrueVisibility(ShootBtn, true);
     buttonSetTrueVisibility(PauseBtn, true);
-    buttonSetTrueVisibility(ExitBtn, true);
   }
 
   @FXML
@@ -409,14 +419,6 @@ public class PrimaryController {
     Target2Circle.setFill(new ImagePattern(getImage("ExtremeDemon.png")));
 
     initialize_dynamic_pos();
-    for (int i = 0; i < PlayerCircles.length; i++) {
-      PlayerCircles[i].setVisible(false);
-      Fingers[i].setVisible(false);
-      Hands[i].setVisible(false);
-      ScoreFramesPlayer[i].setVisible(false);
-      ArrowPolys[i].setTranslateX(0);
-      ArrowPolys[i].setVisible(false);
-    }
     initialize_start();
 
     for (int i = 0; i < ArrowPolys.length; i++) {
@@ -471,6 +473,7 @@ public class PrimaryController {
   public void addPlayer(byte slot, String name) {
     PlayerCircles[slot].setVisible(true);
     Fingers[slot].setVisible(false);
+    Hands[slot].setVisible(false);
     ScoreFramesPlayer[slot].setVisible(true);
     Label playerNameLabel = (Label)ScoreFramesPlayer[slot].getChildren().get(2);
     playerNameLabel.setText(name);
@@ -481,6 +484,7 @@ public class PrimaryController {
   public void removePlayer(byte slot) {
     PlayerCircles[slot].setVisible(false);
     Fingers[slot].setVisible(false);
+    Hands[slot].setVisible(false);
     ScoreFramesPlayer[slot].setVisible(false);
     Label playerScoreLabel = (Label)ScoreFramesPlayer[slot].getChildren().get(4);
     Label playerShotsLabel = (Label)ScoreFramesPlayer[slot].getChildren().get(6);
@@ -524,7 +528,17 @@ public class PrimaryController {
       unreadyPlayer((byte)i);
     }
     isGameGoing = false;
-    createErrorPopup(null, "Игрок " + playerNameLabel.getText() + " победил!");
+    createInfoPopup(null, "Игрок " + playerNameLabel.getText() + " победил!");
+  }
+
+  public void player_paused(byte slot) {
+    Fingers[slot].setVisible(false);
+    Hands[slot].setVisible(true);
+  }
+
+  public void player_unpaused(byte slot) {
+    Fingers[slot].setVisible(true);
+    Hands[slot].setVisible(false);
   }
 
   @FXML
@@ -573,17 +587,17 @@ public class PrimaryController {
     okayButton.setOnAction(value -> {
       String name = nameField.getText().trim();
       if (name.length() == 0) {
-        createErrorPopup(mainBox.getScene().getWindow(), "Неверное имя");
+        createInfoPopup(mainBox.getScene().getWindow(), "Неверное имя");
         return;
       }
       try {
         this.port = Integer.valueOf(portField.getText());
         if (port <= 0) {
-          createErrorPopup(MainFrame.getScene().getWindow(), "Неверный номер порта");
+          createInfoPopup(MainFrame.getScene().getWindow(), "Неверный номер порта");
           return;
         }
       } catch (NumberFormatException e) {
-        createErrorPopup(MainFrame.getScene().getWindow(), "Неверный номер порта");
+        createInfoPopup(MainFrame.getScene().getWindow(), "Неверный номер порта");
         return;
       }
       dialog.close();
@@ -607,7 +621,13 @@ public class PrimaryController {
       return;
     }
     try {
+      try {
       socket = new Socket("127.0.0.1", port);
+      } catch (ConnectException e) {
+        createInfoPopup(null, "В соединении отказано");
+        port = 0;
+        return;
+      }
       dOut = new DataOutputStream(socket.getOutputStream());
       dInp = new DataInputStream(socket.getInputStream());
       dOut.write(new Message.Connect(Integer.valueOf(posField.getText()).byteValue(), nameField.getText().getBytes()).generateByteMessage());
@@ -618,7 +638,12 @@ public class PrimaryController {
           try {
             int ret = dInp.read(message, 0, message.length);
             if (ret == -1) {
+              port = 0;
+              initialize_start();
               flag = false;
+              Platform.runLater(() -> {
+                createInfoPopup(null, "Сервер закрылся");
+              });
             }
           } catch (IOException e) {
             e.printStackTrace();
@@ -640,7 +665,7 @@ public class PrimaryController {
     }
   }
 
-  public void createErrorPopup(Window window, String text) {
+  public void createInfoPopup(Window window, String text) {
     Stage dialog = new Stage();
     VBox mainBox = new VBox();
     mainBox.setAlignment(Pos.CENTER);
@@ -680,13 +705,15 @@ public class PrimaryController {
   }
 
   @FXML
-  private void stopGame() {
-    // TODO: implement
-  }
-
-  @FXML
   private void pauseGame() {
-    // TODO: implement
+    if (isPaused) {
+      sendMessage(new Message.Unpause((byte)0).generateByteMessage());
+      PauseBtn.setText("Пауза");
+    } else {
+      sendMessage(new Message.Pause((byte)0).generateByteMessage());
+      PauseBtn.setText("Продолжить");
+    }
+    isPaused = !isPaused;
   }
 
   public synchronized void sendMessage(byte[] msg) {

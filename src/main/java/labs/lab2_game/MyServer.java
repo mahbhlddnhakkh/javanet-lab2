@@ -29,7 +29,6 @@ public class MyServer {
   public boolean gameIsPaused = false;
 
   private ServerSocket serverSocket;
-  //InetAddress ip = null;
 
   public ServerMessageHandler messageHandler = new ServerMessageHandler(this);
   public ClientHandler[] clients = new ClientHandler[] {null, null, null, null};
@@ -50,7 +49,7 @@ public class MyServer {
       if (server.gameIsGoing) {
         return new Message.Reject(Message.Reject.GAME_GOING).generateByteMessage();
       }
-      String name = new String(message.name, StandardCharsets.UTF_8);
+      String name = new String(message.name, StandardCharsets.UTF_8).trim();
       int slotsLeft = server.clients.length;
       byte freeSlot = 0;
       boolean freeSlotChosen = false;
@@ -85,13 +84,13 @@ public class MyServer {
       if (!server.gameIsGoing) {
         server.clients[slot].ready = ready;
         server.sendToAllPlayers(msg);
+        server.tryStartGame();
       }
     }
 
     @Override
     public byte[] handleReady(Message.Ready message) {
       setReadyUnready(message.slot, (byte)1, message.generateByteMessage());
-      server.tryStartGame();
       return null;
     }
 
@@ -103,22 +102,43 @@ public class MyServer {
 
     @Override
     public byte[] handleShoot(Message.Shoot message) {
-      if (server.gameIsGoing) {
+      if (server.gameIsGoing && !server.gameIsPaused) {
         server.clients[message.slot].shootingState = true;
         server.sendToAllPlayers(message.generateByteMessage());
       }
       return null;
     }
 
+    private synchronized void setPauseUnpause(byte slot, byte action, byte[] msg) {
+      if (server.gameIsGoing) {
+        server.clients[slot].pause = action;
+        server.sendToAllPlayers(msg);
+        boolean flag = true;
+        for (int i = 0; i < server.clients.length; i++) {
+          if (server.clients[i] != null && server.clients[i].pause != (byte)0) {
+            server.gameIsPaused = true;
+            flag = false;
+            break;
+          }
+        }
+        if (flag && server.gameIsPaused) {
+          server.gameIsPaused = false;
+          synchronized (server) {
+            server.notify();
+          }
+        }
+      }
+    }
+
     @Override
     public byte[] handlePause(Message.Pause message) {
-      // TODO: implement
+      setPauseUnpause(message.slot, (byte)1, message.generateByteMessage());
       return null;
     }
 
     @Override
     public byte[] handleUnpause(Message.Unpause message) {
-      // TODO: implement
+      setPauseUnpause(message.slot, (byte)0, message.generateByteMessage());
       return null;
     }
   }
@@ -278,6 +298,8 @@ public class MyServer {
         case Message.SHOOT:
         case Message.SCORE_SYNC:
         case Message.PLAYER_WON:
+        case Message.PAUSE:
+        case Message.UNPAUSE:
           message[1] = slot;
           break;
       }
@@ -289,6 +311,7 @@ public class MyServer {
       resetSync();
       sendToAllPlayers(sync.generateByteMessage());
       gameIsGoing = false;
+      gameIsPaused = false;
       sendToAllPlayers(new Message.PlayerWon(slot).generateByteMessage());
       for (int i = 0; i < clients.length; i++) {
         if (clients[i] != null) {
@@ -383,7 +406,6 @@ public class MyServer {
           target1Direction = 1;
           sync.target1PosY = target1PosStart[1] + Config.target_radius;
         }
-
         sync.target2PosY += Config.target_speed * target2Direction * 2;
         if (sync.target2PosY > target2PosEnd[1] - Config.target_radius / 2) {
           target2Direction = -1;
@@ -401,6 +423,7 @@ public class MyServer {
         }
         gameIsGoing = arePlayersLeft();
       }
+      resetSync();
     });
     sendToAllPlayers(new Message.GameBegin().generateByteMessage());
     gameThread.start();

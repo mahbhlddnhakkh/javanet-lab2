@@ -45,7 +45,6 @@
                   <Button fx:id="ReadyBtn" mnemonicParsing="false" onAction="#ready" text="Готов" />
                   <Button fx:id="ShootBtn" mnemonicParsing="false" onAction="#shoot" text="Выстрел" />
                   <Button fx:id="PauseBtn" mnemonicParsing="false" onAction="#pauseGame" text="Пауза" />
-                  <Button fx:id="ExitBtn" mnemonicParsing="false" onAction="#stopGame" text="Выйти" />
                </children>
                <VBox.margin>
                   <Insets />
